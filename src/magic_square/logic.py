@@ -2,10 +2,17 @@
 
 from __future__ import annotations
 
+from magic_square.constants import CELL_BLANK, MATRIX_SIZE
+
 
 def find_blank_coords(matrix: list[list[int]]) -> list[tuple[int, int]]:
     """row-major로 두 빈칸(0)의 1-index (r, c) 쌍을 정확히 2개 반환."""
-    raise NotImplementedError("GREEN: Track B - find_blank_coords")
+    coords: list[tuple[int, int]] = []
+    for r in range(MATRIX_SIZE):
+        for c in range(MATRIX_SIZE):
+            if matrix[r][c] == CELL_BLANK:
+                coords.append((r + 1, c + 1))
+    return coords
 
 
 def find_not_exist_nums(matrix: list[list[int]]) -> list[int]:
