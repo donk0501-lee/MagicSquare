@@ -1,0 +1,397 @@
+# Magic Square (4×4) — 요구사항·검증·구현 To-Do (통합)
+
+**역할:** docs/ 아래 **단일 원천**으로 (1) 제품 요구·계약·테스트·추적(기존 PRD §1~§12), (2) 구현 To-Do·Dual-Track 작업 순서(§13), (3) README·CI의 완료 기준을 담는다.
+
+**문서 관계 한 줄:** [`Report/5. PRD_Report.md`](../Report/5.%20PRD_Report.md) 서두 — Report에는 동일 본문·히스토리를 **동기 사본**으로 둔다.
+
+**프로젝트:** Magic Square (4×4) — TDD 연습용  
+**문서 버전:** 1.1  
+**작성 기준일:** 2026-04-28  
+**근거 문서:** `Report/4. UserJourney_Backlog_Report.md`(축), `Report/1. ProblemDefinition_Report.md`, `Report/2. LayeredDesign_TDD_Report.md`, `Report/3. CursorRules_WorkReport.md`, 저장소 루트 `.cursorrules`
+
+아래 §1부터는 제품 요구사항(PRD) 본문이다. 장 번호는 기존 PRD와 동일하게 유지한다.
+
+---
+
+## 1. Executive Summary
+
+본 프로젝트는 4×4 고전 마방진(매직 상수 34) 위에 **빈칸(0)이 정확히 두 칸**인 부분 격자를 입력으로 받아, 누락된 두 수를 두 빈칸에 **두 가지 고정 순서로만** 배치·검증한 뒤 성공 시 **`int[6]`** 좌표·값을 반환하는 **순수 도메인 + 경계(Boundary) 검증** 훈련용 소프트웨어이다. 알고리즘 경쟁력이 아니라 **Invariant(불변조건)를 문장·테스트·컴포넌트로 정렬**하고, **입력·출력 계약**을 변경 없이 회귀 테스트로 고정하며, **Dual-Track TDD(경계 트랙 + 도메인 트랙)**를 병렬로 적용하는 역량이 성공의 중심이다. UI 화면·DB·Web API는 범위 밖이며, 호출은 테스트 러너·콘솔 진입점 등 **경계 어댑터**로 한정한다.
+
+---
+
+## 2. Problem Statement (문제 정의)
+
+표면적 과제인 “마방진을 만든다”가 아니라, 본 PRD가 정의하는 문제는 다음이다.
+
+- **대상:** 4행 4열 정수 격자에서 0은 빈칸, 그 외는 1~16의 값이며 0을 제외한 값은 서로 달라야 한다.
+- **과제:** 위 입력 불변조건을 만족할 때만, **row-major 첫 번째 0**과 **두 번째 0**에 누락된 두 수를 **규칙된 순서로 배치**해 완성 격자가 **4행·4열·주대각·부대각 각각 합 34**인지 판정하고, 성립하면 **1-index 좌표와 배치된 두 수**를 `int[6]`로 반환한다.
+
+**입력·출력 계약이 핵심인 이유:** 테스트는 “주어진 입력”과 “기대 출력 또는 기대 오류”에만 의존할 수 있다. 계약이 한 글자라도 모호하면 동일 요구가 두 번 정의되고 회귀 기준이 사라진다. 본 문제는 규칙이 이산적이고 엣지를 체계적으로 열거하기 좋아, **계약 → 테스트 → 구현** 순서가 곧 설계 품질과 동치이다(`Report/1`, `Report/4` 정합).
+
+---
+
+## 3. Target Users
+
+| 구분 | 설명 |
+|------|------|
+| **주 사용자** | TDD·ECB(경계/컨트롤/엔티티)를 학습하는 **소프트웨어 개발 학습자** |
+| **부 사용자** | 동일 계약으로 리뷰·코멘트하는 **동료/멘토/리뷰어** |
+| **사용 목적** | 기능 속도가 아니라 **불변조건·계약·테스트·리팩터링** 사이클을 반복 가능한 습관으로 고정 |
+| **사용 환경** | 로컬 개발 환경에서 **단위·계약 테스트 실행**(예: pytest). 화면 UI는 요구하지 않음 |
+
+---
+
+## 4. Scope
+
+### 4.1 In-Scope
+
+- 4×4 `int[][]` **입력 검증**(경계 레이어; I1~I4와 동등 규칙)
+- **빈칸 두 칸**의 1-index 좌표 산출(row-major 정의 준수)
+- **누락된 두 정수** 산출(1~16 집합 대비)
+- **완전 격자(0 없음)**에 대한 **고전 4×4 마방진 판정**(행·열·두 대각, 합 34)
+- **두 조합 시도**(작은 수→첫 빈칸·큰 수→둘째 빈칸 → 실패 시 역배치) 후 **`int[6]`** 반환 또는 **계약된 오류**
+- Dual-Track TDD에 따른 **경계 계약 테스트**와 **도메인 단위 테스트**
+- **Concept → Rule → Use Case → Contract → Test → Component** 추적 가능성 문서화(본 PRD §12)
+
+### 4.2 Out-of-Scope
+
+- **UI 화면** 개발(윈도우·웹 폼 등)
+- **DB 저장·조회**, 원격 API, 파일 영속화를 **제품 요구**로 포함하는 것
+- **N×N 일반화**(본 PRD의 기능 요구 범위에서 제외; 향후 확장은 별도 PRD 개정으로만)
+- 임의 크기에 대한 마방진 **완전 생성**(enumeration/generator 문제)
+- “반마방진” 등 **I6 이외**의 마방진 정의
+- 본 PRD에 명시되지 않은 **새 기능**(범위 고정)
+
+---
+
+## 5. Functional Requirements (기능 요구사항)
+
+**공통 전제:** 아래 FR의 “입력”은 원시 `int[][]`가 아니라 각 단계에서 명시한 형태이다. FR-01을 통과한 입력만 FR-02 이후 도메인 전제로 사용한다.
+
+---
+
+### FR-01 입력 검증 (Boundary)
+
+| 항목 | 내용 |
+|------|------|
+| **Feature ID** | FR-01 |
+| **설명** | 호출자가 전달한 4×4 정수 행렬이 본 PRD의 입력 불변조건(I1~I4)을 만족하는지 검사하고, 위반 시 **고정 오류 코드·고정 메시지**로 거절한다. |
+| **입력** | `int[][] matrix` — 외부에서 제공된 참조(깊이 2의 정수 행렬 구조) |
+| **처리 규칙** | I1: 외부 배열 길이 4, 각 행 참조의 길이 4. I2: 값 0인 셀의 개수 2. I3: 모든 셀 `v == 0` 또는 `1 ≤ v ≤ 16`. I4: 0이 아닌 값끼리 중복 없음. 위반 시 **첫 번째로 탐지된 규칙**에 매핑되는 오류 코드를 사용한다(탐지 순서는 §11에서 고정). |
+| **출력** | 성공: 도메인이 소비 가능한 “검증 통과” 신호(구현 표현은 언어 관용에 따르되, 의미는 동일). 실패: §8.1의 Error schema. |
+| **AC (테스트 가능)** | (1) 행 개수≠4 또는 임의 행 길이≠4인 입력에 대해 `code=SIZE_INVALID`이고 `message`가 §8.1 표와 **바이트 단위 동일**하다. (2) 0이 1개 또는 3개인 4×4에 대해 `BLANK_COUNT_INVALID` 및 동일 메시지. (3) 17 또는 -1을 포함하는 4×4에 대해 `VALUE_OUT_OF_RANGE` 및 동일 메시지. (4) 비0 동일 값이 2회 이상인 경우 `DUPLICATE_NONZERO` 및 동일 메시지. (5) Gherkin 골든 유효 행렬(§9)은 거절되지 않는다. |
+| **오류/예외 정책** | 도메인 로직은 FR-01 실패 행렬을 받지 않는다. 경계에서만 I1~I4 위반을 소비자에게 노출한다. |
+
+---
+
+### FR-02 빈칸 탐색
+
+| 항목 | 내용 |
+|------|------|
+| **Feature ID** | FR-02 |
+| **설명** | 검증된 퍼즐에서 값 0인 두 칸의 위치를 **row-major(행 번호 오름차순, 동일 행 내 열 번호 오름차순)**으로 스캔했을 때 처음·두 번째로 발견되는 0의 **1-index 좌표**를 확정한다. |
+| **입력** | FR-01을 통과한 4×4 격자 |
+| **처리 규칙** | “첫 빈칸”은 위 스캔에서 첫 0; “둘째 빈칸”은 두 번째 0. 내부 저장이 0-index이더라도 **대외 출력은 1-index**만 사용한다. |
+| **출력** | 내부 표현: `(r_first, c_first)`, `(r_second, c_second)` 각각 1~4 정수 쌍(의미 확정용). 단독 공개 API가 없어도 되나, FR-05 출력의 `(r1,c1)`, `(r2,c2)`와 동일 규칙이어야 한다. |
+| **AC** | 행렬 M1(§9.1)에 대해 첫 빈칸이 (1,2), 둘째가 (2,1)이다. 행렬 M2(§9.1)에 대해 첫 빈칸 (3,4), 둘째 (4,4)이다. |
+| **오류/예외 정책** | FR-01 전제 위반이면 FR-02는 호출되지 않는다. |
+
+---
+
+### FR-03 누락 숫자 탐색
+
+| 항목 | 내용 |
+|------|------|
+| **Feature ID** | FR-03 |
+| **설명** | 1부터 16까지의 정수 중 격자에 나타나지 않은 **정확히 두 수** `{a,b}`를 찾는다. |
+| **입력** | FR-01을 통과한 4×4 격자 |
+| **처리 규칙** | 0은 “미배치”로 취급하여 집합에서 제외하고, 1~16의 등장 여부로 누락 집합을 계산한다. 내부적으로 `n_small = min(a,b)`, `n_large = max(a,b)`로 고정한다. |
+| **출력** | 순서 없는 쌍 `{n_small, n_large}`(구현은 길이 2 정렬 배열 등) |
+| **AC** | M1에서 누락 집합이 {3,5}이고 `n_small=3`, `n_large=5`이다. M2에서 누락 집합이 {1,6}이다. |
+| **오류/예외 정책** | FR-01을 만족하면 누락은 항상 두 개이다(증명은 집합 크기 산술로 테스트 보조 주석 또는 문서에 한 줄). |
+
+---
+
+### FR-04 마방진 판정
+
+| 항목 | 내용 |
+|------|------|
+| **Feature ID** | FR-04 |
+| **설명** | **모든 셀이 0이 아닌** 4×4 격자에 대해, 네 행·네 열·주대각·부대각의 각 합이 **34**인지 여부를 `boolean`으로 반환한다. |
+| **입력** | 4×4 `int[][]`, 0 없음, FR-01과 모순 없는 값 범위 |
+| **처리 규칙** | 네 행 합=34, 네 열 합=34, 주대각 합=34, 부대각 합=34가 **모두 참**일 때만 `true`. 하나라도 거짓이면 `false`. |
+| **출력** | `true` 또는 `false` |
+| **AC** | (1) M1에 FR-02·03 규칙으로 3과 5를 배치한 완성 격자가 마방진이면 `true`. (2) “한 행 합만 33으로 바꾼” 완성 격자에 대해 `false`. (3) “한 열만 깨진” 완성 격자 `false`. (4) 주대각만 깨진 경우 `false`. (5) 부대각만 깨진 경우 `false`. |
+| **오류/예외 정책** | 0이 남아 있으면 본 FR의 입력으로 사용하지 않는다(호출 책임은 상위 유스케이스). |
+
+---
+
+### FR-05 해 찾기 (Solution): 두 조합 시도 및 반환
+
+| 항목 | 내용 |
+|------|------|
+| **Feature ID** | FR-05 |
+| **설명** | 누락 두 수를 두 빈칸에 **시도 1** 후 필요 시 **시도 2**만 수행하고, 성공 시 `int[6]`을 반환한다. |
+| **입력** | FR-01 통과 격자 |
+| **처리 규칙** | (1) FR-02로 `(r1,c1)`, `(r2,c2)` 확정. (2) FR-03으로 `n_small`, `n_large` 확정. (3) **시도 1:** 첫 빈칸에 `n_small`, 둘째 빈칸에 `n_large`를 넣은 완성 격자에 FR-04 적용 → `true`이면 **즉시** `[r1,c1,n1,r2,c2,n2]`로 반환하되 `n1=n_small`, `n2=n_large`(포맷은 항상 `[r1,c1,n1,r2,c2,n2]`). (4) 시도 1이 `false`이면 **시도 2:** 첫 빈칸에 `n_large`, 둘째에 `n_small`을 넣어 FR-04 → `true`이면 `n1=n_large`, `n2=n_small`으로 동일 포맷 반환. (5) 둘 다 `false`이면 §6 BR-13에 따라 실패. |
+| **출력** | 성공: 길이 6의 `int[]`, 요소 순서 `[r1,c1,n1,r2,c2,n2]`, 모든 좌표 1~4, `n1`·`n2`는 1~16 서로 다름이며 누락 두 수와 집합 일치. 실패: §8.1 `NOT_MAGIC_SQUARE` 및 고정 메시지(경계에서 노출). |
+| **AC** | (1) M1에 대해 출력이 `[1,2,3,2,1,5]`와 **원소 단위 동일**하다. (2) M2에 대해 출력이 `[3,3,6,4,4,1]`과 **원소 단위 동일**하다. (3) 두 시도 모두 실패하는 검증된 퍼즐에 대해 `NOT_MAGIC_SQUARE` 및 고정 메시지. |
+| **오류/예외 정책** | 도메인 내부 코드명 `NOT_MAGIC`는 경계 매핑 시 `NOT_MAGIC_SQUARE`로 변환한다(`Report/2` 정합). |
+
+**시도 1 성공 시 시도 2 미실행:** 두 배치가 모두 마방진이 되는 이론적 경우에도, **시도 1이 `true`이면 시도 2를 실행하지 않는다**(결정론 및 단일 기대값 보장).
+
+---
+
+## 6. Business Rules (도메인 규칙)
+
+| ID | 규칙 문장 |
+|----|-----------|
+| **BR-01** | 격자는 항상 4행이며 각 행은 항상 4열이다. |
+| **BR-02** | 값이 0인 셀의 개수는 항상 정확히 2이다. |
+| **BR-03** | 임의의 셀 값 `v`에 대해 `v = 0` 또는 `1 ≤ v ≤ 16`이다. |
+| **BR-04** | 0이 아닌 임의의 두 셀에 대해 값이 같으면 안 된다. |
+| **BR-05** | “첫 빈칸”은 row-major 스캔에서 첫 번째 0의 위치이며, “둘째 빈칸”은 두 번째 0의 위치이다. |
+| **BR-06** | 대외 좌표 `(r,c)`는 항상 1-index이며 `1 ≤ r ≤ 4`, `1 ≤ c ≤ 4`이다. |
+| **BR-07** | 4×4 고전 마방진의 매직 상수는 항상 `M = 34`이다(`n=4`일 때 `M = n(n²+1)/2`). |
+| **BR-08** | 완성 격자가 마방진이 되려면 네 행·네 열·주대각·부대각의 각 합이 항상 34이어야 한다. |
+| **BR-09** | 누락된 두 수를 `n_small ≤ n_large`로 명명한다. |
+| **BR-10** | 시도 1: 첫 빈칸에 `n_small`, 둘째 빈칸에 `n_large`. 시도 1의 완성 격자가 마방진이면 출력 `(n1,n2) = (n_small, n_large)`이다. |
+| **BR-11** | 시도 1이 마방진이 아니면 시도 2: 첫 빈칸에 `n_large`, 둘째에 `n_small`. 시도 2의 완성 격자가 마방진이면 출력 `(n1,n2) = (n_large, n_small)`이다. |
+| **BR-12** | 시도 1이 마방진이면 시도 2는 평가하지 않는다. |
+| **BR-13** | 시도 1·2가 모두 마방진이 아니면 성공 출력은 존재하지 않으며 `NOT_MAGIC_SQUARE` 규약을 따른다. |
+| **BR-14** | 성공 출력 배열은 항상 `[r1,c1,n1,r2,c2,n2]`이며 `n1`은 첫 빈칸에 배치된 값, `n2`는 둘째 빈칸에 배치된 값이다. |
+
+---
+
+## 7. Non-Functional Requirements
+
+| ID | 요구사항 | 검증 방법 |
+|----|-----------|-----------|
+| **NFR-01** | Domain Logic 라인(또는 팀이 고정한 지표가 브랜치면 브랜치) **커버리지 ≥ 95%** | CI 또는 로컬에서 커버리지 도구 리포트에 수치 기록 |
+| **NFR-02** | Boundary(입력 검증·오류 매핑) **커버리지 ≥ 85%** | 동일 |
+| **NFR-03** | **결정론:** 동일 입력에 대해 성공 시 `int[6]`이 항상 동일하고, 실패 시 오류 `code`가 항상 동일하다 | 동일 입력·시드 없는 반복 테스트 |
+| **NFR-04** | **부작용:** 구현체는 호출자가 전달한 `int[][]`의 어떤 셀도 **읽기 검증 목적 외 변경하지 않는다**(검증·해 탐색은 복사본 또는 신규 배열에서 수행). | 테스트가 전달 배열을 스냅샷 비교하여 변경 0을 검증 |
+| **NFR-05** | **매직 넘버 금지:** 4, 16, 34, 인덱스 규칙 등은 이름 있는 상수 또는 단일 스펙 객체에 집약한다. | 코드 리뷰 체크리스트 + 금지 패턴(`.cursorrules` forbidden 정합) |
+| **NFR-06** | (선택) 단일 퍼즐 처리 **종단 간 50ms 미만**(로컬 CPU, 정상 부하) | 성능 테스트 1회 이상, 상한 assert |
+
+---
+
+## 8. Dual-Track TDD Strategy
+
+### 8.1 Track A — Boundary(UI) TDD
+
+**목표:** 원시 입력·원시 출력·오류 스키마를 **계약 테스트로 먼저** 고정한다. 도메인은 포트/인터페이스 뒤에서 테스트 더블로 대체 가능해야 한다.
+
+**Contract-first 테스트 항목(최소):**
+
+| ID | 조건 | 기대 `code` | 기대 `message`(정확 문자열) |
+|----|------|--------------|---------------------------|
+| U-01 | `int[3][4]` | `SIZE_INVALID` | `Matrix must be 4x4.` |
+| U-02 | 한 행만 길이 3인 4행 구조 | `SIZE_INVALID` | 동일 |
+| U-03 | 0이 1개 | `BLANK_COUNT_INVALID` | `Exactly two cells must be 0.` |
+| U-04 | 0이 3개 | `BLANK_COUNT_INVALID` | 동일 |
+| U-05 | 값 17 포함 | `VALUE_OUT_OF_RANGE` | `Each cell must be 0 or between 1 and 16 inclusive.` |
+| U-06 | 값 -1 포함 | `VALUE_OUT_OF_RANGE` | 동일 |
+| U-07 | 비0 중복 | `DUPLICATE_NONZERO` | `Non-zero values must be unique.` |
+| U-08 | 유효 입력 + 도메인 더블 성공 | 반환 배열 길이 6, 더블이 반환한 값과 **원소 단위 동일** | (메시지 없음) |
+| U-09 | 유효 입력 + 도메인 더블 `NOT_MAGIC` | `NOT_MAGIC_SQUARE` | `No valid placement completes a 4x4 magic square.` |
+
+**실패 정책:** 경계는 위 코드·메시지 외의 임의 문구를 외부에 노출하지 않는다. 예상 밖 예외는 `INTERNAL_ERROR` / `Unexpected error.`로만 래핑하며, 정상 계약 테스트 경로에서는 `INTERNAL_ERROR`를 유발하지 않는다.
+
+### 8.2 Track B — Domain(Logic) TDD
+
+**메서드(개념) 단위 테스트(예시 ID — `Report/2` 정렬):** `validatePuzzleInput`, `locateTwoBlanks`, `findMissingTwoNumbers`, `isMagicSquareComplete`, `resolveTwoBlankMagicOutput` 각각에 대해 성공·실패 분기 최소 1케이스.
+
+**불변조건 테스트(필수 매핑):** I1~I4는 입력 검증 또는 도메인 진입 전 테스트로, I6·I7는 FR-04·FR-05 골든·부정 케이스로, 빈칸 순서는 FR-02 AC로 검증한다.
+
+### 8.3 병렬 진행 규칙
+
+1. **동일 스프린트/작업 단위에서** Track A RED와 Track B RED를 먼저 작성한다(한쪽만 장기간 앞서는 것 금지).  
+2. GREEN은 **양 트랙 각각** 최소 구현으로 통과시킨다.  
+3. REFACTOR는 **계약·테스트를 깨지 않는** 범위에서만 수행한다.  
+4. **금지:** “도메인 전부 구현 후 경계 추가” 순서.
+
+---
+
+## 9. Test Plan (QA)
+
+### 9.1 테스트 데이터(대표 4×4)
+
+**M1 — 작은 수→첫 빈칸 성공(Gherkin 정합):**
+
+| 16 | 0 | 2 | 13 |
+| 0 | 10 | 11 | 8 |
+| 9 | 6 | 7 | 12 |
+| 4 | 15 | 14 | 1 |
+
+- 기대 `int[6]`: `[1,2,3,2,1,5]`
+
+**M2 — 역배치 성공:**
+
+| 16 | 2 | 3 | 13 |
+| 5 | 11 | 10 | 8 |
+| 9 | 7 | 0 | 12 |
+| 4 | 14 | 15 | 0 |
+
+- 기대 `int[6]`: `[3,3,6,4,4,1]`
+
+### 9.2 시나리오 기반 테스트 목록
+
+| ID | 유형 | 입력/조건 | 기대 |
+|----|------|-----------|------|
+| T-01 | 정상 | M1 | `[1,2,3,2,1,5]` |
+| T-02 | 정상 | M2 | `[3,3,6,4,4,1]` |
+| T-03 | 입력 오류 | 0이 1개인 임의 4×4 | `BLANK_COUNT_INVALID` + 고정 메시지 |
+| T-04 | 입력 오류 | 비0 중복 4×4 | `DUPLICATE_NONZERO` + 고정 메시지 |
+| T-05 | 도메인 실패 | FR-01 만족하나 두 시도 모두 비마방진인 격자(고정 픽스처 1개 이상 유지) | `NOT_MAGIC_SQUARE` + 고정 메시지 |
+
+### 9.3 회귀 테스트 정책
+
+- §9.1 골든 입력·출력 문자열은 **삭제·묵시 변경 금지**; 변경 시 PRD 버전과 변경 이력 항목을 갱신한다.  
+- 공개 오류 `code`·`message` 변경은 **의도적 메이저/마이너 버전 업**과 동시에만 허용한다.
+
+### 9.4 Property / Invariant 기반 체크
+
+| 항목 | 검증 |
+|------|------|
+| P-01 | FR-01 통과 격자에 대해 0의 개수는 항상 2 |
+| P-02 | 성공 출력에서 `{n1,n2}`의 집합은 항상 FR-03 누락 집합과 같음 |
+| P-03 | 성공 출력에서 `(r1,c1)`은 항상 M의 row-major 첫 0의 1-index |
+| P-04 | 임의 FR-01 통과 격자에 대해 FR-04는 항상 0 없는 완성 격자에만 `true` 가능 |
+
+---
+
+## 10. Architecture Overview (High-Level)
+
+### 10.1 레이어
+
+| 레이어 | 책임 |
+|--------|------|
+| **Boundary** | 원시 `int[][]` 수용, I1~I4 검증, 도메인 실패(`NOT_MAGIC`)를 Error schema로 매핑, 성공 시 `int[6]` 형식 검증(길이 6, 좌표 범위) |
+| **Domain** | FR-02~FR-05 순수 규칙, 외부 I/O 없음, 프레임워크 비의존 |
+| **Control(선택)** | “검증 → 탐색 → 누락 → 해결” 호출 순서만 오케스트레이션; 규칙은 도메인에 둔다 |
+
+### 10.2 책임 분리(SRP) 및 확장(OCP)
+
+- 규칙 변경 시 **한 컴포넌트만** 수정되도록 SRP 유지(`Report/2`의 서비스 분할을 표준으로 삼는다).  
+- N×N 등 범위 확장은 **새 스펙/새 PRD**로 닫힌 변경만 허용(OCP는 “인터페이스 뒤 교체”가 아니라 “계약 단위 개편”으로 다룸).
+
+### 10.3 의존성 방향
+
+- Boundary → Domain(포트 또는 직접 호출) **단방향**.  
+- Domain은 Boundary·CLI·저장소를 **참조하지 않는다**.
+
+**권장 컴포넌트 명(개념):** `PuzzleInputInvariantChecker`, `EmptyCellLocator`, `MissingNumberFinder`, `MagicCompletenessChecker`, `TwoBlankSolutionResolver`, (선택) `MagicSquareSpec`(`Report/2`).
+
+---
+
+## 11. Risks & Ambiguities
+
+| 결정 항목 | 본 PRD에서의 고정 |
+|-----------|-------------------|
+| 두 시도 모두 실패 | 경계에서 `NOT_MAGIC_SQUARE` / `No valid placement completes a 4x4 magic square.` |
+| 두 시도가 이론상 모두 성공 | **시도 1이 성공이면 시도 2를 실행하지 않음**(BR-12) |
+| I1~I4 다중 위반 | **첫 번째 규칙 순서:** SIZE(I1) → BLANK_COUNT(I2) → VALUE_RANGE(I3) → DUPLICATE(I4)로 스캔하며 최초 위반만 노출(테스트는 각 단독 위반 케이스로 고정) |
+| 입력 배열 변조 | NFR-04: 비변경 |
+| 1-index vs 0-index 혼동 | 모든 대외 계약은 1-index; 내부만 0-index일 경우 경계에서만 변환 |
+| 자주 실수하는 포인트 | row-major 정의, `int[6]`에서 `n1`이 첫 빈칸 값임, 매직 상수 34 단일 출처 |
+
+---
+
+## 12. Traceability Matrix (필수)
+
+| Concept / Invariant | Business Rule | Feature (FR) | Acceptance Criteria (요약) | Test Case | Component |
+|---------------------|---------------|--------------|-----------------------------|-------------|-------------|
+| I1 4×4 크기 | BR-01 | FR-01 | 비4×4 → `SIZE_INVALID` 고정 문구 | U-01, U-02 | PuzzleInputInvariantChecker, Boundary |
+| I2 0 정확히 2개 | BR-02 | FR-01 | 0 개수 위반 → `BLANK_COUNT_INVALID` | U-03, U-04, T-03 | PuzzleInputInvariantChecker, Boundary |
+| I3 0 또는 1~16 | BR-03 | FR-01 | 범위 위반 → `VALUE_OUT_OF_RANGE` | U-05, U-06 | PuzzleInputInvariantChecker, Boundary |
+| I4 비0 유일 | BR-04 | FR-01 | 중복 → `DUPLICATE_NONZERO` | U-07, T-04 | PuzzleInputInvariantChecker, Boundary |
+| 빈칸 순서(row-major) | BR-05, BR-06 | FR-02 | M1/M2 좌표 고정 | T-01, T-02 (간접) | EmptyCellLocator |
+| 누락 두 수 | BR-09 | FR-03 | M1 {3,5}, M2 {1,6} | T-01, T-02 (간접) | MissingNumberFinder |
+| M=34 | BR-07 | FR-04 | 깨진 완성 격자 → `false` | FR-04 AC | MagicCompletenessChecker, MagicSquareSpec |
+| I6 마방진 합 | BR-08 | FR-04, FR-05 | 완성 10선 합 34 | T-01, T-02, T-05 | MagicCompletenessChecker |
+| 시도 순서·출력 의미 | BR-10~BR-14 | FR-05 | M1/M2 `int[6]` 동일 / 실패 시 NOT_MAGIC | T-01, T-02, T-05, U-09 | TwoBlankSolutionResolver, Boundary |
+| 결정론·비변조 | NFR-03, NFR-04 | 전 FR | 동일 입출력·배열 불변 | 회귀 스위트 | Boundary, Domain |
+
+---
+
+---
+
+## 13. 구현 To-Do 보드
+
+**역할:** 본 장은 README·스프린트에서 쓰는 **작업 목록**이다. 요구·검증 근거는 위 §1~§12와 동일 문서 안에 있다.
+
+**스토리 표현:** [`Report/4. UserJourney_Backlog_Report.md`](../Report/4.%20UserJourney_Backlog_Report.md)  
+**계약·오류(세부):** [`Report/2. LayeredDesign_TDD_Report.md`](../Report/2.%20LayeredDesign_TDD_Report.md)  
+**실행·ECB·TDD:** [`Report/3. CursorRules_WorkReport.md`](../Report/3.%20CursorRules_WorkReport.md), [`pyproject.toml`](../pyproject.toml), 저장소 루트 [`.cursorrules`](../.cursorrules)  
+**문서 관계 한 줄:** [`Report/5. PRD_Report.md`](../Report/5.%20PRD_Report.md) 서두.
+
+**방법론:** Concept→Code 추적, Dual-Track(Boundary + Domain), To-Do→Scenario→Test→Code, ECB, RED→GREEN→REFACTOR.
+
+### 13.1 Epic
+
+- [ ] **Epic-001 — 불변조건·계약 기반 4×4 두 빈칸 마방진 완성**  
+  - **완료 조건:** 본 문서 §5 FR-01~FR-05, §6 BR-01~BR-14, §8 U-01~U-09, §9.1 M1/M2 골든, §9.2 T-01~T-05, §12 추적 유지, §7 NFR-01(도메인 ≥95%)·NFR-02(경계 ≥85%)·NFR-04(입력 배열 비변조).
+
+### 13.2 User Story (`Report/4` 정합)
+
+- [ ] **US-001 (경계)** — 원시 `int[][]`가 I1~I4를 위반하면 §8.1 고정 `code`·`message`로 거절된다. *(FR-01, `Report/2` Error schema)*  
+- [ ] **US-002 (도메인)** — FR-01 통과 퍼즐에 대해 row-major 두 빈칸·누락 두 수·두 조합 시도 후 `int[6]` 또는 도메인 `NOT_MAGIC`→경계 `NOT_MAGIC_SQUARE`로 결정된다. *(FR-02~FR-05)*  
+- [ ] **US-003 (통합·품질)** — ECB 의존 방향·결정론·매직 넘버 금지·커버리지 게이트가 §7 NFR 및 `pyproject.toml` / `.cursorrules`와 정합한다.
+
+### 13.3 Phase별 Task 전체 표
+
+**Scenario:** L0 개요 / L1 정상 / L2 경계 / L3 실패.
+
+| 완료 | ID | 단계 | 작업 제목 | Sc. | 연결 Test | 연결 Code | ECB | 체크포인트 |
+|------|-----|------|-----------|-----|-----------|-----------|-----|------------|
+| [ ] | TASK-001 | RED | 최소 `pytest` 실패(모듈·진입점 미구현) 확보 | L0 | `test_project_scaffold` | `tests/`, 패키지 레이아웃 | — | RED 확인 |
+| [ ] | TASK-002 | GREEN | ECB 권장 트리 스텁으로 스모크 통과 | L0 | `test_magic_square_package_importable` | `src/magic_square/` | — | `.cursorrules` `file_structure` |
+| [ ] | TASK-003 | REFACTOR | §12 Task→FR→Test 매핑 문서화 | L0 | (문서) | `docs/` | — | 추적표와 ID 대응 |
+| [ ] | TASK-004 | RED | 매직 상수·크기 단일 출처 테스트 | L1 | `test_magic_square_spec_constant` | `MagicSquareSpec` | Entity | NFR-05 |
+| [ ] | TASK-005 | GREEN | `MagicSquareSpec`(또는 동등) 구현 | L1 | 동상 | `entity/` | Entity | GREEN |
+| [ ] | TASK-006 | REFACTOR | `PuzzleGrid` 등 값 복사·원본 분리 | L2 | `test_puzzle_grid_copy_detached` | `PuzzleGrid` | Entity | NFR-04 준비 |
+| [ ] | TASK-007 | RED | `validatePuzzleInput` I1~I4 실패 케이스 | L3 | `test_validate_D06_D11` | `PuzzleInputInvariantChecker` | Domain | `Report/2` D-06~11 |
+| [ ] | TASK-008 | RED | Boundary `SIZE_INVALID` U-01,U-02 | L3 | `test_boundary_U01_U02` | Boundary API | Boundary | §8.1 문구 동일 |
+| [ ] | TASK-009 | RED | Boundary U-03~U-07 | L3 | `test_boundary_U03_U07` | Boundary | Boundary | Mock 도메인 |
+| [ ] | TASK-010 | GREEN | Domain FR-01 I1~I4 + 탐지 순서 §11 | L2 | `test_validate_order` | `PuzzleInputInvariantChecker` | Domain | FR-01 AC |
+| [ ] | TASK-011 | REFACTOR | 도메인 오류 타입에 사용자 문구 없음 | L2 | `test_domain_no_user_facing_strings` | Domain | Domain | ECB |
+| [ ] | TASK-012 | GREEN | Boundary→고정 Error schema 매핑 | L3 | `test_boundary_maps_validation` | `boundary/` | Boundary | U-01~07 GREEN |
+| [ ] | TASK-013 | REFACTOR | `INTERNAL_ERROR` 래핑 정책 | L3 | `test_boundary_internal_error_optional` | Boundary | Boundary | §8.1 |
+| [ ] | TASK-014 | RED | `locateTwoBlanks` M1,M2 좌표 | L1 | `test_locate_M1_M2` | `EmptyCellLocator` | Domain | FR-02 AC |
+| [ ] | TASK-015 | GREEN | `CellIndex` VO + row-major 구현 | L1 | `test_cell_index_contract` | `EmptyCellLocator` | Entity | BR-05,06 |
+| [ ] | TASK-016 | RED | `findMissingTwoNumbers` M1,M2 | L1 | `test_missing_M1_M2` | `MissingNumberFinder` | Domain | FR-03 |
+| [ ] | TASK-017 | GREEN | `n_small`/`n_large` 정렬 쌍 | L2 | `test_missing_sorted` | `MissingNumberFinder` | Entity | BR-09 |
+| [ ] | TASK-018 | RED | `isMagicSquareComplete` 행/열/대각 실패 분기 | L3 | `test_magic_complete_D13_D16` | `MagicCompletenessChecker` | Domain | FR-04 AC |
+| [ ] | TASK-019 | GREEN | 10선 합 34 판정 | L1 | `test_magic_complete_true` | `MagicCompletenessChecker` | Domain | I6,I7 |
+| [ ] | TASK-020 | RED | `resolve` 골든 T-01,T-02 | L1 | `test_resolve_M1_M2` | `TwoBlankSolutionResolver` | Domain | §9.1 |
+| [ ] | TASK-021 | GREEN | 시도1 성공 시 시도2 미실행 BR-12 | L2 | `test_resolve_skip_second` | `TwoBlankSolutionResolver` | Domain | NFR-03 |
+| [ ] | TASK-022 | RED | 두 시도 실패 `NOT_MAGIC` | L3 | `test_resolve_T05` | `TwoBlankSolutionResolver` | Domain | T-05 |
+| [ ] | TASK-023 | GREEN | Boundary U-09 `NOT_MAGIC_SQUARE` 매핑 | L3 | `test_boundary_U09` | Boundary | Boundary | PRD 메시지 |
+| [ ] | TASK-024 | RED | Control 호출 순서 테스트 | L0 | `test_use_case_order` | `SolveTwoBlankPuzzleUseCase` | Control | 규칙 없음 |
+| [ ] | TASK-025 | GREEN | Control 구현·Boundary 주입 | L1 | `test_control_integration` | `control/` | Control | §10.3 |
+| [ ] | TASK-026 | REFACTOR | Domain 포트·U-08 더블 | L1 | `test_boundary_U08_port` | Port/Fake | Control/Boundary | U-08 |
+| [ ] | TASK-027 | GREEN | 실도메인 E2E M1,M2 | L1 | `test_e2e_M1_M2` | Boundary→Control→Domain | Boundary | 골든 회귀 |
+| [ ] | TASK-028 | GREEN | 성공 `int[6]` 스키마 검증 | L2 | `test_output_schema` | Boundary | Boundary | `Report/2` Output |
+| [ ] | TASK-029 | RED | Property P-02 등 최소 1건 | L2 | `test_property_missing_set` | Domain | Domain | §9.4 |
+| [ ] | TASK-030 | GREEN | NFR-04 입력 배열 불변 | L2 | `test_input_matrix_untouched` | Boundary | Boundary | NFR-04 |
+| [ ] | TASK-031 | REFACTOR | 중복 제거·이름 정리(계약 유지) | L0 | 전 스위트 | 전체 | — | REFACTOR 규율 |
+| [ ] | TASK-032 | — | 커버리지 리포트: Domain ≥95%, Boundary ≥85% | L0 | `pytest --cov` | CI/로컬 | — | NFR-01,02 |
+| [ ] | TASK-033 | — | `black`/`ruff`(팀 합의)·YAML 검증 | L0 | (툴) | — | — | `Report/3` |
+
+### 13.4 Dual-Track (§8.3)
+
+동일 작업 단위에서 **Track A RED**와 **Track B RED**를 먼저 병렬로 작성한다. **금지:** 도메인 전부 구현 후 경계만 추가.
+
+### 13.5 Task·Test 추적
+
+Task·Test ID를 **§12 Traceability Matrix**와 주기적으로 대조한다.
+
+---
+
+## 문서 이력
+
+| 버전 | 일자 | 변경 |
+|------|------|------|
+| 1.0 | 2026-04-28 | 초안(Report/1~4, .cursorrules); Report/5 동기 |
+| 1.1 | 2026-04-28 | docs 하위 PRD·To-Do·리다이렉트 세 파일을 본 MagicSquare_4x4_TDD.md 단일 문서로 통합; 작업 내역 `Report/6. Documentation_Consolidation_WorkReport.md` |
