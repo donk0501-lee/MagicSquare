@@ -1,0 +1,41 @@
+# --- pytest / coverage (테스트 부산물) ---
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+*.cover
+.hypothesis/
+
+# --- 바이트코드 ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# --- 패키징·설치 로컬 산출 ---
+build/
+dist/
+*.egg-info/
+*.egg
+
+# --- 가상환경 ---
+.venv/
+venv/
+env/
+.env/
+.python-version
+
+# --- 타입·린트 캐시 ---
+.mypy_cache/
+.ruff_cache/
+.dmypy.json
+dmypy.json
+
+# --- IDE / OS ---
+.idea/
+.vscode/
+*.swp
+*~
+.DS_Store
+Thumbs.db
