@@ -138,7 +138,14 @@ python -m pytest
 python -m pytest --cov=magic_square --cov-report=term-missing
 ```
 
-소스는 [`src/magic_square/`](src/magic_square/) 패키지, 테스트는 [`tests/`](tests/)를 사용합니다(ECB 세분화는 구현 진행에 따라 추가).
+**GUI(공식 진입점 한 줄):** PyQt6 설치 후 `python -m magic_square` 로 4×4 입력·「풀기」·결과 표시 창을 띄웁니다.
+
+```powershell
+python -m pip install -e ".[dev,gui]"
+python -m magic_square
+```
+
+소스는 [`src/magic_square/`](src/magic_square/) 패키지, 테스트는 [`tests/`](tests/)를 사용합니다(ECB 세분화는 구현 진행에 따라 추가). Qt 의존 코드는 [`src/magic_square/gui/`](src/magic_square/gui/) 에만 둡니다.
 
 ---
 
