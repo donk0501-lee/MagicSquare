@@ -78,13 +78,18 @@ def solution(matrix: list[list[int]]) -> list[int]:
     i1, j1 = r1 - 1, c1 - 1
     i2, j2 = r2 - 1, c2 - 1
 
-    grid_try1 = _filled_grid(matrix, i1, j1, i2, j2, n_small, n_large)
-    if is_magic_square(grid_try1):
-        return [r1, c1, n_small, r2, c2, n_large]
+    def try_placement(n1: int, n2: int) -> list[int] | None:
+        grid = _filled_grid(matrix, i1, j1, i2, j2, n1, n2)
+        if is_magic_square(grid):
+            return [r1, c1, n1, r2, c2, n2]
+        return None
 
-    grid_try2 = _filled_grid(matrix, i1, j1, i2, j2, n_large, n_small)
-    if is_magic_square(grid_try2):
-        return [r1, c1, n_large, r2, c2, n_small]
+    out = try_placement(n_small, n_large)
+    if out is not None:
+        return out
+    out = try_placement(n_large, n_small)
+    if out is not None:
+        return out
 
     raise MagicSquareDomainError(
         DOMAIN_NOT_MAGIC_CODE,
